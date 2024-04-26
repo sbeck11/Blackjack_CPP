@@ -4,8 +4,7 @@
 #include "human.hpp"
 #include <string>
 
-class Player: public Human{
-
+class Player: public Human {
 private:
     std::string name;        // Name of Player
     int cash, bet;           // Player's Cash, Player's Bet
@@ -25,5 +24,6 @@ public:
     void incrementLoses();
     void clearCards();
 };
+
 
 #endif

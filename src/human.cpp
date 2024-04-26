@@ -2,9 +2,7 @@
 #include <iostream>
 
 // Default Constructor
-Human::Human(){
-    sum = 0;
-}
+Human::Human() : sum(0) {}
 
 // Getter Function for sum to check end of game
 int Human::getSum(){
@@ -12,15 +10,14 @@ int Human::getSum(){
     return sum;
 }
 
-// Switches Ace between 1 and 11
-void Human::switchAce(){
-    if(sum>21){
-        for(int i=0;i<hand.size();i++){
-                if(hand[i].getNumber()==1 && !(hand[i].getBlock())){
-                    hand[i].setBlock(true);
-                    sum-=10;
-                    return;
-                }
+void Human::switchAce() {
+    if (sum > 21) {
+        for (std::size_t i = 0; i < hand.size(); i++) {
+            if (hand[i].getNumber() == 1 && !hand[i].getBlock()) {
+                hand[i].setBlock(true);
+                sum -= 10;
+                return;
+            }
         }
     }
 }
@@ -43,20 +40,20 @@ void Human::clearCards(){
     sum = 0;
 }
 
-// Prints Human's cards
-void Human::printCards(){
-    std::cout<<"\n";
-    for(int i=0;i<6;i++){
-        for(int j=0;j<hand.size();j++){
-            switch(i){
-                case 0: std::cout<<".------."; break;
-                case 1: std::cout<<"|"<<hand[j].getPrintNumber()<<".--. |"; break;
+void Human::printCards() {
+    std::cout << "\n";
+    for (int i = 0; i < 6; i++) {
+        for (std::size_t j = 0; j < hand.size(); j++) {
+            switch (i) {
+                case 0: std::cout << ".------."; break;
+                case 1: std::cout << "|" << hand[j].getPrintNumber() << ".--. |"; break;
                 case 2: hand[j].printCardL1(); break;
                 case 3: hand[j].printCardL2(); break;
-                case 4: std::cout<<"| '--'"<<hand[j].getPrintNumber()<<"|"; break;
-                case 5: std::cout<<"`------'";
+                case 4: std::cout << "| '--'" << hand[j].getPrintNumber() << "|"; break;
+                case 5: std::cout << "`------'"; break;
+                default: std::cerr << "Unexpected case: " << i << std::endl; break; // Default case added
             }
         }
-        std::cout<<"\n";
+        std::cout << "\n";
     }
 }

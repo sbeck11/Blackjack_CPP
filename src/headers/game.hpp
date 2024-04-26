@@ -22,6 +22,7 @@ class Game{
         char compareSum();
         bool checkWins();
         char checkEnd();
+        char getValidCharInput();
         bool startBet();
         bool startGame();
         void beginGame();
@@ -32,6 +33,7 @@ class Game{
         void printInstructions();
         void printTop();
         void printBody();
+        
 };
 
 #endif

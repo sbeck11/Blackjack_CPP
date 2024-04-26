@@ -4,13 +4,41 @@
 #include <iostream>
 #include <fstream>
 #include <algorithm>
+#include <cctype> 
+#include <filesystem>
+
+bool isValidFilename(const std::string& filename) {
+    // Check if the filename contains any invalid characters
+    for (char ch : filename) {
+        if (!(isalnum(ch) || ch == '_' || ch == '-')) {
+            return false; 
+        }
+    }
+    return true;
+}
+
+void sanitizeInput(std::string& input) {
+    // Trim leading and trailing whitespace
+    input.erase(input.begin(), std::find_if(input.begin(), input.end(), [](unsigned char ch) {
+        return !std::isspace(ch);
+    }));
+    input.erase(std::find_if(input.rbegin(), input.rend(), [](unsigned char ch) {
+        return !std::isspace(ch);
+    }).base(), input.end());
+
+    std::transform(input.begin(), input.end(), input.begin(), ::tolower);
+
+    // Check for directory traversal
+    if (input.find("..") != std::string::npos) {
+        throw std::runtime_error("Invalid input: directory traversal is not allowed.");
+    }
+}
 
 //////////////* Default Constructor *////
 
-Game::Game(){
+Game::Game() : player(), dealer(), deck(), s() {
     deck.initializeDeck();
 }
-
 //////////////* Deals dealer towards the end *////
 
 bool Game::dealDealer(){
@@ -52,14 +80,14 @@ char Game::compareSum(){
 }
 
 bool Game::checkWins(){
-    switch(checkEnd()){
+    switch (checkEnd()) {
         case 'f': return false;
         case 'd': player.incrementLoses(); return true;
-        case 'p': player.incrementWins();
-                  player.addCash((player.getBet()*2));
-                  return true;
+        case 'p': player.incrementWins(); player.addCash(player.getBet() * 2); return true;
+        default:  // Default case added to handle unexpected values
+            std::cerr << "Unhandled case in checkEnd()." << std::endl;
+            return false;
     }
-    return false;
 }
 
 char Game::checkEnd(){
@@ -88,27 +116,38 @@ char Game::checkEnd(){
 
 //////////////* Game Starters *////
 
-bool Game::startBet(){
-    if(player.getCash()>0){
-        while(true){
+bool Game::startBet() {
+    if(player.getCash() > 0) {
+        while(true) {
             printTop();
-            std::cout<<"Place your bet!\t\t $"<<green<<player.getBet()<<def<<"\n[W = Raise Bet | S = Decrease Bet | R = Done]\n";
-            int c = toupper(getch());
-            switch(c){
-                case 87: if(player.getCash()>=5){
-                            player.setBet(5);
-                         }
-                         break;
-                case 83: if(player.getBet()>=5){
-                            player.setBet(-5);
-                         }
-                         break;
+            std::cout << "Place your bet! $ " << green << player.getBet() << def 
+                      << "\n[W = Raise Bet | S = Decrease Bet | R = Done]\n";
+            char input = getch();
+            int c = toupper(input); // Only allow uppercase processing
+            if (!isalpha(input)) {  // Validate that the input is a letter
+                std::cerr << "Invalid input. Please enter W, S, or R." << std::endl;
+                continue;
             }
-            if(c==82) break;
+            switch(c) {
+                case 'W':
+                    if(player.getCash() >= 5) {
+                        player.setBet(5);
+                    }
+                    break;
+                case 'S':
+                    if(player.getBet() >= 5) {
+                        player.setBet(-5);
+                    }
+                    break;
+                case 'R':
+                    return true;
+                default:
+                    std::cerr << "Unhandled betting input: " << static_cast<char>(c) << std::endl;
+                    break;
+            }
         }
-        return true;
-    }
-    else{
+    } else {
+        std::cout << "Insufficient funds to place any bets.\n";
         return false;
     }
 }
@@ -151,12 +190,13 @@ void Game::beginGame(){
         }
         if (startGame()){
             if (dealDealer()){
-                switch (compareSum()){
-                case 'p': player.incrementWins(); 
-                          player.addCash((player.getBet()*2));
-                          break;
-                case 'd': player.incrementLoses(); break;
-                case 'n': player.addCash(player.getBet()); break;
+                switch (compareSum()) {
+                    case 'p': player.incrementWins(); player.addCash(player.getBet() * 2); break;
+                    case 'd': player.incrementLoses(); break;
+                    case 'n': player.addCash(player.getBet()); break;
+                    default:
+                        std::cerr << "Unexpected result from compareSum()" << std::endl;
+                        break;
                 }
             }
         }
@@ -169,7 +209,7 @@ void Game::beginGame(){
             std::cout<< lightYellow << "High Score!\n"<<def;
         }
         std::cout<<"\nContinue playing? [Y/N]: ";
-        std::cin>>cont;
+        cont = getValidCharInput();
     } while (cont != 'N' && cont != 'n');
     char saveChoice;
     std::cout<<"\nSave game? [Y/N]: ";
@@ -215,75 +255,100 @@ void Game::beginMenu(bool rep, std::string message){
 
 //////////////* Data File Handling *////
 
-void Game::saveGame(){
-    std::fstream f1,f2;
-    std::string filename;
-    std::string path = "data/";
-    do{
-    std::cout<<"Enter filename: ";
-    std::cin>>filename;
-    std::transform(filename.begin(), filename.end(), filename.begin(), ::tolower);
-    }while(filename.compare("statistics")==0);
-    path+=filename+".bin";
+void Game::saveGame() {
+    std::fstream f1;
+    std::string filename, path = "data/";
+    bool valid = false;
+
+    do {
+        std::cout << "Enter filename: ";
+        std::cin >> filename;
+
+        try {
+            sanitizeInput(filename);
+        } catch (const std::runtime_error& e) {
+            std::cout << e.what() << std::endl;
+            continue;
+        }
+
+        if (!isValidFilename(filename)) {
+            std::cout << "Error: Invalid filename entered." << std::endl;
+        } else {
+            valid = true;
+        }
+    } while (!valid);
+
+    path += filename + ".bin";
+
+    if (std::filesystem::exists(path)) {
+        char choice;
+        std::cout << "File already exists. Do you want to overwrite it? [Y/N]: ";
+        std::cin >> choice;
+        if (tolower(choice) == 'n') {
+            return;
+        }
+    }
+
+    f1.open(path, std::ios::out | std::ios::binary);
+    if (!f1.is_open()) {
+        std::cerr << "Failed to open file for writing." << std::endl;
+        return;
+    }
+
+    // Assume fetching data from a 'player' object
     std::string sName = player.getName();
+    int nameSize = sName.size();
     int sCash = player.getCash();
     int sWins = player.getWins();
     int sLoses = player.getLoses();
-    int nameSize = sName.size();
-    f2.open(path, std::ios::in | std::ios::binary);
-    if(!f2.fail()){
-        char choice;
-        std::cout<<red<<"File already exists."<<def<<" Do you want to overwrite it? [Y/N]: ";
-        std::cin>>choice;
-        if(choice == 'N' || choice == 'n'){
-            saveGame();
-        }
-    }
-    f2.close();
-    f1.open(path, std::ios::out | std::ios::binary);
-    f1.write((char*)&nameSize, sizeof(nameSize));
-    f1.write(sName.c_str(), sName.size());
-    f1.write((char*)&sCash, sizeof(sCash));
-    f1.write((char*)&sWins, sizeof(sWins));
-    f1.write((char*)&sLoses, sizeof(sLoses));
+
+    // Write data
+    f1.write(reinterpret_cast<const char*>(&nameSize), sizeof(nameSize));
+    f1.write(sName.c_str(), static_cast<std::streamsize>(sName.size()));
+    f1.write(reinterpret_cast<const char*>(&sCash), sizeof(sCash));
+    f1.write(reinterpret_cast<const char*>(&sWins), sizeof(sWins));
+    f1.write(reinterpret_cast<const char*>(&sLoses), sizeof(sLoses));
     f1.close();
 }
 
-void Game::loadGame(){
+void Game::loadGame() {
     std::fstream f1;
     std::string filename;
+    std::cout << "Enter filename: ";
+    std::cin >> filename;
+
+    sanitizeInput(filename);
+
+    if (!isValidFilename(filename)) {
+        std::cerr << "Error: Invalid filename entered." << std::endl;
+    }    
     std::string path = "data/";
-    do{
-    std::cout<<"Enter filename: ";
-    std::cin>>filename;
+    std::cout << "Enter filename: ";
+    std::cin >> filename;
     std::transform(filename.begin(), filename.end(), filename.begin(), ::tolower);
-    }while(filename.compare("statistics")==0);
-    path+=filename+".bin";
+    path += filename + ".bin";
     f1.open(path, std::ios::in | std::ios::binary);
-    if(!f1.fail()){
+    if (f1.is_open()) {
         std::string sName;
-        int sCash;
-        int sWins;
-        int sLoses;
         int nameSize;
-        f1.read((char*)&nameSize, sizeof(nameSize));
-        sName.resize(nameSize);
-        f1.read(&sName[0], sName.size());
-        f1.read((char*)&sCash, sizeof(sCash));
-        f1.read((char*)&sWins, sizeof(sWins));
-        f1.read((char*)&sLoses, sizeof(sLoses));
+        f1.read(reinterpret_cast<char*>(&nameSize), sizeof(nameSize));
+        sName.resize(static_cast<std::string::size_type>(std::max(nameSize, 0)));
+        f1.read(&sName[0], static_cast<std::streamsize>(sName.size()));
+        int sCash, sWins, sLoses;
+        f1.read(reinterpret_cast<char*>(&sCash), sizeof(sCash));
+        f1.read(reinterpret_cast<char*>(&sWins), sizeof(sWins));
+        f1.read(reinterpret_cast<char*>(&sLoses), sizeof(sLoses));
         f1.close();
         player.setName(sName);
         player.addCash(sCash - player.getCash());
-        while(player.getWins()!=sWins){
+        while (player.getWins() != sWins) {
             player.incrementWins();
         }
-        while(player.getLoses()!=sLoses){
+        while (player.getLoses() != sLoses) {
             player.incrementLoses();
         }
-    }
-    else{
-        beginMenu(true, "File does not exist.");
+    } else {
+        std::cout << "File does not exist. Please try again." << std::endl;
     }
 }
 
@@ -320,3 +385,17 @@ void Game::printBody(){
     player.printCards();
     std::cout << lightGreen<< "\nSum: "<<lightRed<< player.getSum()<<def<<"\n";
 }
+
+char Game::getValidCharInput() {
+    char input;
+    while (true) {
+        std::cin >> input;
+        input = toupper(input);
+        if (input == 'Y' || input == 'N') {
+            return input;
+        } else {
+            std::cout << "Invalid input. Please enter Y or N: ";
+        }
+    }
+}
+
